@@ -1,0 +1,161 @@
+import os
+import pandas as pd
+import joblib
+import dash
+from dash import Dash, dcc, html, dash_table, Input, Output
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+import plotly.express as px
+import plotly.graph_objects as go
+
+# Load test data
+X_test = pd.read_csv("data/X_test.csv")
+y_test = pd.read_csv("data/y_test.csv").values.ravel()
+
+# Load models
+model_dir = "models_all"
+model_files = [f for f in os.listdir(model_dir) if f.endswith(".pkl")]
+
+results = []
+for file in model_files:
+    model_path = os.path.join(model_dir, file)
+    model_name = file.replace("_fraud_model.pkl", "").replace("_", " ").title()
+    model = joblib.load(model_path)
+    y_pred = model.predict(X_test)
+    tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+    acc = accuracy_score(y_test, y_pred)
+    prec = precision_score(y_test, y_pred)
+    rec = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+
+    results.append({
+        "Model": model_name,
+        "Accuracy (%)": round(acc * 100, 2),
+        "Precision (%)": round(prec * 100, 2),
+        "Recall (%)": round(rec * 100, 2),
+        "F1 Score (%)": round(f1 * 100, 2),
+        "TN": tn, "FP": fp, "FN": fn, "TP": tp
+    })
+
+summary_df = pd.DataFrame(results)
+
+# Load flagged transactions
+transactions = pd.read_csv("dashboard/flagged_transactions.csv")
+
+# Fix for synthetic date
+if "Time" in transactions.columns:
+    transactions["date"] = pd.to_datetime("2023-01-01") + pd.to_timedelta(transactions["Time"], unit="s")
+else:
+    transactions["date"] = pd.to_datetime("2023-01-01")
+
+# Normalize column names
+transactions.columns = transactions.columns.str.strip()
+transactions.rename(columns={
+    "Predicted_Class": "predicted",
+    "Actual_Class": "actual",
+    "Amount": "amount"
+}, inplace=True)
+
+app = Dash(__name__)
+app.title = "Credit Card Fraud Dashboard"
+
+app.layout = html.Div([
+    html.H1("Credit Card Fraud Dashboard", style={"textAlign": "center"}),
+
+    html.Div([
+        html.Label("Select Model:"),
+        dcc.Dropdown(
+            id="model-filter",
+            options=[{"label": m, "value": m} for m in summary_df["Model"]],
+            placeholder="Select model",
+        ),
+        html.Br(),
+        html.Label("Select Date Range:"),
+        dcc.DatePickerRange(
+            id="date-filter",
+            min_date_allowed=transactions["date"].min(),
+            max_date_allowed=transactions["date"].max(),
+            start_date=transactions["date"].min(),
+            end_date=transactions["date"].max(),
+        ),
+        html.Br(),
+        html.Label("Probability Threshold:"),
+        dcc.Slider(
+            id="threshold-filter",
+            min=0.0, max=1.0, step=0.01, value=0.5,
+            marks={0: "0.0", 0.5: "0.5", 1: "1.0"}
+        )
+    ], style={"padding": "20px"}),
+
+    html.H2("Model Performance Summary", style={"textAlign": "center"}),
+    dash_table.DataTable(
+        columns=[{"name": i, "id": i} for i in summary_df.columns],
+        data=summary_df.to_dict("records"),
+        page_size=10,
+        style_table={"overflowX": "auto"},
+        style_cell={"textAlign": "center"},
+        style_header={"backgroundColor": "black", "color": "white"},
+    ),
+
+    html.H2("Class Distribution", style={"textAlign": "center"}),
+    dcc.Graph(id="class-dist"),
+
+    html.H2("Fraud Over Time", style={"textAlign": "center"}),
+    dcc.Graph(id="fraud-trend"),
+
+    html.H2("Confusion Matrix", style={"textAlign": "center"}),
+    dcc.Graph(id="conf-matrix"),
+
+    html.H2("Fraud Loss Summary", style={"textAlign": "center"}),
+    html.Div(id="fraud-loss-summary", style={"textAlign": "center", "fontSize": 18}),
+
+    html.Br(),
+    html.Button("Download Filtered Data", id="download-btn"),
+    dcc.Download(id="download-dataframe-csv")
+])
+
+@app.callback(
+    Output("class-dist", "figure"),
+    Output("fraud-trend", "figure"),
+    Output("conf-matrix", "figure"),
+    Output("fraud-loss-summary", "children"),
+    Output("download-dataframe-csv", "data"),
+    Input("model-filter", "value"),
+    Input("date-filter", "start_date"),
+    Input("date-filter", "end_date"),
+    Input("threshold-filter", "value"),
+    Input("download-btn", "n_clicks"),
+)
+def update_dashboard(model, start_date, end_date, threshold, n_clicks):
+    df = transactions.copy()
+    if model and model_name in df.columns:
+        df = df[df["model_name"].str.title() == model]
+    df = df[(df["date"] >= pd.to_datetime(start_date)) &
+            (df["date"] <= pd.to_datetime(end_date))]
+
+    if "probability" in df.columns:
+        df = df[df["probability"] >= threshold]
+
+    if not df.empty and "Predicted_Class" in df.columns and "Actual_Class" in df.columns:
+    	class_fig = px.histogram(df, x="Predicted_Class", color="Actual_Class", barmode="group")
+    	fraud_trend = df[df["Predicted_Class"] == 1].groupby(df["date"].dt.date)["Amount"].sum()
+    	trend_fig = px.line(fraud_trend, title="Fraud Amount Over Time")
+
+    	cm = confusion_matrix(df["Actual_Class"], df["Predicted_Class"])
+    	cm_fig = go.Figure(data=go.Heatmap(z=cm, x=["Not Fraud", "Fraud"],
+                                       y=["Not Fraud", "Fraud"], colorscale="Blues"))
+    	cm_fig.update_layout(title="Confusion Matrix")
+
+    	total_loss = df[df["Predicted_Class"] == 1]["Amount"].sum()
+    	loss_summary = f"Total Fraud Amount Flagged: ${total_loss:,.2f}"
+    else:
+    	class_fig = trend_fig = cm_fig = go.Figure()
+    	loss_summary = "No data for selected filters."
+
+
+    download = dcc.send_data_frame(df.to_csv, "filtered_fraud.csv") if n_clicks else dash.no_update
+    return class_fig, trend_fig, cm_fig, loss_summary, download
+
+if __name__ == "__main__":
+    print("Dash app is running...")
+    app.run(host="0.0.0.0", port=8050)
+

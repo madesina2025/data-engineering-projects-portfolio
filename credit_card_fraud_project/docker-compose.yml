@@ -1,0 +1,20 @@
+services:
+  credit_card_fraud_detection:
+    build: .
+    ports:
+      - "8050:8050"
+      - "8888:8888"
+    volumes:
+      - .:/app
+    command: ["bash", "entrypoint.sh"]
+#services:
+#  fraud-detection:
+#    build: .
+#    ports:
+#      - "8888:8888"
+#      - "8050:8050"
+#    volumes:
+#      - .:/app
+#    command: bash /app/entrypoint.sh  # ← Ensures script runs
+#    
+#    container_name: credit_card_fraud_detection

@@ -1,0 +1,13 @@
+services:
+  fraud-detection:
+    build: .
+    ports:
+      - "8888:8888"  # Jupyter
+      - "8050:8050"  # Dash  
+
+    volumes:
+      - .:/app
+
+    container_name: credit_card_fraud_detection
+
+
