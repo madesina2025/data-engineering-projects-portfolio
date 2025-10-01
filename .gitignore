@@ -1,0 +1,18 @@
+# secrets
+.env
+
+# local/dev
+venv/
+.env
+__pycache__/
+.ipynb_checkpoints/
+*.dmg
+*.DS_Store
+
+# local/dev
+venv/
+.env
+__pycache__/
+.ipynb_checkpoints/
+*.dmg
+*.DS_Store
