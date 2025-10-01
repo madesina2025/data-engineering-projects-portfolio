@@ -16,3 +16,9 @@ __pycache__/
 .ipynb_checkpoints/
 *.dmg
 *.DS_Store
+.DS_Store
+.ipynb_checkpoints/
+__pycache__/
+venv/
+.env
+*.dmg
