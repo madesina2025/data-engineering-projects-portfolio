@@ -22,3 +22,10 @@ __pycache__/
 venv/
 .env
 *.dmg
+
+# local junk
+venv/
+.env
+.ipynb_checkpoints/
+*.dmg
+.DS_Store
