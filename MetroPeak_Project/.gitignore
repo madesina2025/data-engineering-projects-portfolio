@@ -1,0 +1,26 @@
+# --- secrets & envs ---
+.env
+*.env
+
+# --- python junk ---
+__pycache__/
+*.py[cod]
+*.pyo
+.ipynb_checkpoints/
+
+# --- virtual envs ---
+venv/
+.env*/         # e.g., .env.local, .env.dev folders
+
+# --- data / large files (keep out of git) ---
+*.csv
+*.parquet
+*.zip
+data/
+
+# --- VS Code ---
+.vscode/
+.history/
+
+# --- OS cruft ---
+.DS_Store
