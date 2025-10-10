@@ -3,3 +3,5 @@ requests
 numpy
 SQLAlchemy
 psycopg2-binary
+psycopg
+python-dotenv
